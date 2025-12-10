@@ -694,6 +694,7 @@ if st.session_state.get('show_results') and st.session_state.get('current_analys
         submitted = st.form_submit_button("💾 피드백 저장", type="primary", use_container_width=True)
         
         if submitted:
+            # 피드백 데이터 생성
             feedback_data = {
                 "actual_thickness": actual_thickness if actual_thickness > 0 else None,
                 "actual_weight": actual_weight if actual_weight > 0 else None,
@@ -705,19 +706,38 @@ if st.session_state.get('show_results') and st.session_state.get('current_analys
                 "feedback_timestamp": datetime.now().isoformat()
             }
             
-            st.session_state['current_analysis']['feedback'] = feedback_data
-            
-            history = load_history_from_aidrive()
-            if history and history[0]['material_code'] == material_code:
-                history[0]['feedback'] = feedback_data
-                is_saved = save_history_to_aidrive(history)
+            # 현재 분석 기록에 피드백 추가
+            if 'current_analysis' in st.session_state:
+                current_material_code = st.session_state['current_analysis']['material_code']
+                st.session_state['current_analysis']['feedback'] = feedback_data
                 
-                if is_saved:
-                    st.success("✅ **피드백이 AI Drive에 저장되었습니다!** 팀원들이 볼 수 있습니다.")
+                # 히스토리 업데이트
+                history = load_history_from_aidrive()
+                
+                # 해당 소재 코드 찾아서 업데이트
+                updated = False
+                for i, record in enumerate(history):
+                    if record.get('material_code') == current_material_code:
+                        history[i]['feedback'] = feedback_data
+                        updated = True
+                        break
+                
+                if updated:
+                    is_saved = save_history_to_aidrive(history)
+                    
+                    if is_saved:
+                        st.success("✅ **피드백이 AI Drive에 저장되었습니다!** 팀원들이 볼 수 있습니다.")
+                    else:
+                        st.success("✅ **피드백이 저장되었습니다!** (세션 스토리지)")
+                    
+                    st.balloons()
+                    
+                    # 페이지 새로고침을 위한 rerun
+                    st.rerun()
                 else:
-                    st.info("ℹ️ 피드백이 세션에 저장되었습니다.")
-            
-            st.balloons()
+                    st.error("❌ 해당 소재를 히스토리에서 찾을 수 없습니다.")
+            else:
+                st.error("❌ 분석 기록이 없습니다. 먼저 소재 분석을 진행해주세요.")
 
 # ========================================
 # 측정 이력 조회
@@ -849,6 +869,6 @@ st.markdown("""
     <p><strong>F&F Sergio Tacchini Planning Team</strong></p>
     <p>AI Material Analysis System v3.0 (OpenCV Real Image Analysis)</p>
     <p>✅ 같은 이미지 → 같은 결과 보장</p>
-    <p>문의: kijeongk@fnf.co.kr</p>
+    <p>문의: materials@ff.co.kr</p>
 </div>
 """, unsafe_allow_html=True)
