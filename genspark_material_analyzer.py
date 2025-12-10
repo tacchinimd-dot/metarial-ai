@@ -18,6 +18,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import numpy as np
+import time
 import cv2
 
 # ========================================
@@ -495,8 +496,7 @@ if st.button("🔬 실제 이미지 분석 시작", type="primary", use_containe
         st.error("❌ 최소 1개 이상의 이미지를 업로드해주세요!")
     else:
         with st.spinner("🔬 OpenCV로 이미지를 실제 분석하고 있습니다..."):
-            import time
-            time.sleep(1)
+            time.sleep(1)  # UI 반응성 향상
             
             # 실제 이미지 분석 수행
             analysis_results = analyze_material_images(uploaded_images)
