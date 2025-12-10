@@ -230,7 +230,15 @@ def load_history_from_aidrive():
                 return json.load(f)
         return []
     except Exception:
-        return st.session_state.get('analysis_history', [])
+        # ✅ 1. 세션 히스토리 확인
+        if 'analysis_history' in st.session_state:
+            return st.session_state['analysis_history']
+        
+        # ✅ 2. current_analysis라도 보여주기
+        if 'current_analysis' in st.session_state:
+            return [st.session_state['current_analysis']]
+        
+        return []
 
 def save_history_to_aidrive(history_data):
     """AI Drive에 분석 이력 저장"""
@@ -239,6 +247,7 @@ def save_history_to_aidrive(history_data):
             json.dump(history_data, f, ensure_ascii=False, indent=2)
         return True
     except Exception:
+        # ✅ 세션에 명시적으로 저장
         st.session_state['analysis_history'] = history_data
         return False
 
