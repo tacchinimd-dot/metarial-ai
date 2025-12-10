@@ -253,10 +253,7 @@ def add_analysis_record(record):
     return is_aidrive
 
 def update_feedback_in_history(material_code, timestamp, feedback_data):
-    """
-    히스토리에서 특정 분석 기록을 찾아 피드백 업데이트
-    material_code와 timestamp로 정확히 식별
-    """
+    """히스토리에서 특정 분석 기록을 찾아 피드백 업데이트"""
     history = load_history_from_aidrive()
     
     updated = False
@@ -266,6 +263,13 @@ def update_feedback_in_history(material_code, timestamp, feedback_data):
             history[i]['feedback'] = feedback_data
             updated = True
             break
+    
+    # ✅ 새로 추가: 못 찾으면 current_analysis를 히스토리에 추가!
+    if not updated and 'current_analysis' in st.session_state:
+        current_record = st.session_state['current_analysis'].copy()
+        current_record['feedback'] = feedback_data
+        history.insert(0, current_record)
+        updated = True
     
     if updated:
         is_saved = save_history_to_aidrive(history)
