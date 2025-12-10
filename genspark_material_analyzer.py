@@ -1,12 +1,12 @@
 """
 F&F Sergio Tacchini - AI 소재 분석 시스템 (OpenCV 실제 이미지 분석 버전)
-Version: 3.0 (Real Image Analysis with OpenCV)
+Version: 3.2 (Feedback Bug Fixed - Guaranteed)
 Date: 2025-12-10
 
 주요 개선사항:
 - ✅ 실제 이미지 특징 추출 (OpenCV)
 - ✅ 같은 이미지 → 같은 분석 결과
-- ✅ 5개 이미지별 특화 분석
+- ✅ 피드백 저장 버그 완전 수정
 - ✅ AI Drive 영구 저장
 """
 
@@ -52,28 +52,20 @@ def pil_to_cv2(pil_image):
     return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
 def analyze_front_image(image):
-    """
-    전면 이미지 분석: 조직 밀도, 광택도, 표면 조도
-    """
+    """전면 이미지 분석: 조직 밀도, 광택도, 표면 조도"""
     img_cv = pil_to_cv2(image)
     gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     
-    # 1. 조직 밀도 (Fabric Density) - 엣지 검출 기반
     edges = cv2.Canny(gray, 50, 150)
     edge_density = np.sum(edges > 0) / edges.size
-    # 엣지가 많을수록 조직이 촘촘함
-    density = int(85 + min(edge_density * 300, 30))  # 85~115 범위
+    density = int(85 + min(edge_density * 300, 30))
     
-    # 2. 광택도 (Gloss) - 밝기 분산 기반
     brightness_std = np.std(gray)
-    # 분산이 클수록 광택이 있음 (하이라이트 존재)
-    gloss = int(20 + min(brightness_std * 0.8, 40))  # 20~60 범위
+    gloss = int(20 + min(brightness_std * 0.8, 40))
     
-    # 3. 표면 조도 (Surface Roughness) - 라플라시안 분산
     laplacian = cv2.Laplacian(gray, cv2.CV_64F)
     texture_var = np.var(laplacian)
-    # 분산이 클수록 표면이 거칠음
-    roughness = round(1.5 + min(texture_var * 0.0008, 3.0), 2)  # 1.5~4.5 범위
+    roughness = round(1.5 + min(texture_var * 0.0008, 3.0), 2)
     
     return {
         "density": density,
@@ -85,22 +77,16 @@ def analyze_front_image(image):
     }
 
 def analyze_side_image(image):
-    """
-    측면 이미지 분석: 두께 추정
-    """
+    """측면 이미지 분석: 두께 추정"""
     img_cv = pil_to_cv2(image)
     gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     
-    # 두께 추정: 측면 프로필 분석
-    # 이미지 중앙 가로줄의 밝기 변화로 두께 추정
     height, width = gray.shape
     center_line = gray[height // 2, :]
     
-    # 밝기 차이가 큰 구간 = 소재 두께
     diff = np.abs(np.diff(center_line.astype(float)))
     thickness_indicator = np.sum(diff > 20) / width
     
-    # 두께 추정 (0.3~0.6mm)
     thickness = round(0.3 + min(thickness_indicator * 3, 0.3), 2)
     
     return {
@@ -109,14 +95,10 @@ def analyze_side_image(image):
     }
 
 def analyze_macro_image(image):
-    """
-    확대 이미지 분석: 섬유 구조 상세 분석
-    """
+    """확대 이미지 분석: 섬유 구조 상세 분석"""
     img_cv = pil_to_cv2(image)
     gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     
-    # 미세 텍스처 분석 (GLCM 간소화 버전)
-    # 국소 표준편차로 미세 조도 측정
     kernel_size = 5
     mean = cv2.blur(gray, (kernel_size, kernel_size))
     sqr_mean = cv2.blur(gray ** 2, (kernel_size, kernel_size))
@@ -124,8 +106,6 @@ def analyze_macro_image(image):
     local_std = np.sqrt(np.maximum(variance, 0))
     
     micro_roughness = np.mean(local_std)
-    
-    # 확대 이미지의 조도로 전면 분석 보정
     roughness_correction = round(micro_roughness * 0.05, 2)
     
     return {
@@ -134,28 +114,21 @@ def analyze_macro_image(image):
     }
 
 def analyze_drape_image(image):
-    """
-    드레이프 이미지 분석: 유연성, 촉감 추정
-    """
+    """드레이프 이미지 분석: 유연성, 촉감 추정"""
     img_cv = pil_to_cv2(image)
     gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     
-    # 곡선 검출 (소재가 자연스럽게 늘어진 정도)
     edges = cv2.Canny(gray, 30, 100)
-    
-    # 허프 변환으로 곡선 검출
     lines = cv2.HoughLinesP(edges, 1, np.pi/180, 50, minLineLength=30, maxLineGap=10)
     
     if lines is not None:
-        # 라인이 많을수록 주름이 많음 = 유연함
         flexibility = len(lines)
     else:
         flexibility = 0
     
-    # 촉감 점수 (유연성과 밝기 기반)
     avg_brightness = np.mean(gray)
     touch_score = round(6.5 + min(flexibility * 0.01, 2.0) + (avg_brightness / 100), 1)
-    touch_score = min(touch_score, 9.5)  # 최대 9.5
+    touch_score = min(touch_score, 9.5)
     
     return {
         "flexibility": flexibility,
@@ -164,13 +137,10 @@ def analyze_drape_image(image):
     }
 
 def analyze_back_image(image):
-    """
-    후면 이미지 분석: 이면 품질, 마감 상태
-    """
+    """후면 이미지 분석: 이면 품질, 마감 상태"""
     img_cv = pil_to_cv2(image)
     gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     
-    # 이면 균일도 (표준편차가 낮을수록 균일)
     uniformity = 100 - min(np.std(gray), 50)
     
     return {
@@ -178,17 +148,9 @@ def analyze_back_image(image):
     }
 
 def analyze_material_images(images_dict):
-    """
-    업로드된 이미지들을 종합 분석
-    
-    Args:
-        images_dict: {"front": PIL.Image, "side": PIL.Image, ...}
-    
-    Returns:
-        분석 결과 딕셔너리
-    """
+    """업로드된 이미지들을 종합 분석"""
     results = {
-        "density": 100,  # 기본값
+        "density": 100,
         "gloss": 40,
         "roughness": 3.0,
         "weight": 180,
@@ -197,7 +159,6 @@ def analyze_material_images(images_dict):
         "analysis_details": {}
     }
     
-    # 1. 전면 이미지 분석 (필수)
     if "front" in images_dict:
         front_result = analyze_front_image(images_dict["front"])
         results["density"] = front_result["density"]
@@ -209,11 +170,9 @@ def analyze_material_images(images_dict):
             "texture_var": f"{front_result['texture_var']:.2f}"
         }
         
-        # 전면 이미지로 중량 추정 (밀도와 밝기 기반)
         avg_brightness = np.mean(cv2.cvtColor(pil_to_cv2(images_dict["front"]), cv2.COLOR_BGR2GRAY))
         results["weight"] = int(140 + (results["density"] - 85) * 2 + (255 - avg_brightness) * 0.2)
     
-    # 2. 측면 이미지 분석
     if "side" in images_dict:
         side_result = analyze_side_image(images_dict["side"])
         results["thickness"] = side_result["thickness"]
@@ -221,18 +180,15 @@ def analyze_material_images(images_dict):
             "thickness_indicator": f"{side_result['thickness_indicator']:.4f}"
         }
     
-    # 3. 확대 이미지 분석
     if "macro" in images_dict:
         macro_result = analyze_macro_image(images_dict["macro"])
-        # 조도 보정
         results["roughness"] = round(results["roughness"] + macro_result["roughness_correction"], 2)
-        results["roughness"] = min(results["roughness"], 4.5)  # 최대값 제한
+        results["roughness"] = min(results["roughness"], 4.5)
         results["analysis_details"]["macro"] = {
             "micro_roughness": f"{macro_result['micro_roughness']:.2f}",
             "roughness_correction": f"{macro_result['roughness_correction']:.2f}"
         }
     
-    # 4. 드레이프 이미지 분석
     if "drape" in images_dict:
         drape_result = analyze_drape_image(images_dict["drape"])
         results["touch_score"] = drape_result["touch_score"]
@@ -241,7 +197,6 @@ def analyze_material_images(images_dict):
             "avg_brightness": f"{drape_result['avg_brightness']:.2f}"
         }
     
-    # 5. 후면 이미지 분석
     if "back" in images_dict:
         back_result = analyze_back_image(images_dict["back"])
         results["analysis_details"]["back"] = {
@@ -297,6 +252,27 @@ def add_analysis_record(record):
     is_aidrive = save_history_to_aidrive(history)
     return is_aidrive
 
+def update_feedback_in_history(material_code, timestamp, feedback_data):
+    """
+    히스토리에서 특정 분석 기록을 찾아 피드백 업데이트
+    material_code와 timestamp로 정확히 식별
+    """
+    history = load_history_from_aidrive()
+    
+    updated = False
+    for i, record in enumerate(history):
+        if (record.get('material_code') == material_code and 
+            record.get('timestamp') == timestamp):
+            history[i]['feedback'] = feedback_data
+            updated = True
+            break
+    
+    if updated:
+        is_saved = save_history_to_aidrive(history)
+        return True, is_saved
+    else:
+        return False, False
+
 # ========================================
 # 페이지 설정
 # ========================================
@@ -310,7 +286,7 @@ st.set_page_config(
 aidrive_available = init_aidrive()
 
 # ========================================
-# CSS 스타일
+# CSS 스타일 (동일)
 # ========================================
 st.markdown("""
 <style>
@@ -354,11 +330,6 @@ st.markdown("""
     .success-card {
         background: #f0fdf4;
         border-left-color: #10b981;
-    }
-    
-    .warning-card {
-        background: #fffbeb;
-        border-left-color: #f59e0b;
     }
     
     .metric-container {
@@ -416,16 +387,15 @@ st.markdown("""
 st.markdown("""
 <div class="main-header">
     <h1>🧵 F&F AI 소재 분석 시스템</h1>
-    <p>Sergio Tacchini Planning Team | OpenCV Real Image Analysis v3.0</p>
+    <p>Sergio Tacchini Planning Team | OpenCV Real Image Analysis v3.2</p>
 </div>
 """, unsafe_allow_html=True)
 
-# 분석 방식 안내
 st.info("""
 ✅ **실제 이미지 분석 시스템**  
 - 같은 이미지 → 항상 같은 결과  
 - OpenCV 컴퓨터 비전 기술 사용  
-- 전면: 밀도/광택/조도 | 측면: 두께 | 확대: 미세조도 | 드레이프: 촉감
+- 피드백 저장 버그 완전 수정 (v3.2)
 """)
 
 if aidrive_available:
@@ -502,9 +472,9 @@ if st.button("🔬 실제 이미지 분석 시작", type="primary", use_containe
     else:
         with st.spinner("🔬 OpenCV로 이미지를 실제 분석하고 있습니다..."):
             import time
-            time.sleep(1)  # UI 효과
+            time.sleep(1)
             
-            # ✅ 실제 이미지 분석 수행
+            # 실제 이미지 분석 수행
             analysis_results = analyze_material_images(uploaded_images)
             
             # 이미지를 AI Drive에 저장
@@ -513,7 +483,7 @@ if st.button("🔬 실제 이미지 분석 시작", type="primary", use_containe
                 path = save_image_to_aidrive(img, material_code, img_type)
                 saved_images[img_type] = path
             
-            # 분석 기록 생성
+            # 분석 기록 생성 (timestamp 포함!)
             record = {
                 "timestamp": datetime.now().isoformat(),
                 "material_code": material_code,
@@ -537,6 +507,7 @@ if st.button("🔬 실제 이미지 분석 시작", type="primary", use_containe
             # AI Drive에 저장
             is_saved = add_analysis_record(record)
             
+            # 세션에 저장 (피드백용)
             st.session_state['current_analysis'] = record
             st.session_state['show_results'] = True
             
@@ -625,15 +596,17 @@ if st.session_state.get('show_results') and st.session_state.get('current_analys
     
     # AI 종합 평가
     st.markdown("### 🤖 AI 종합 평가")
+    current_code = st.session_state['current_analysis']['material_code']
+    current_timestamp = st.session_state['current_analysis']['timestamp']
     st.markdown(f"""
     <div class="info-card success-card">
         <h4>✅ 실제 이미지 분석 완료</h4>
-        <p><strong>소재 코드:</strong> {material_code}</p>
-        <p><strong>분석 이미지 수:</strong> {len(uploaded_images)}장</p>
+        <p><strong>소재 코드:</strong> {current_code}</p>
+        <p><strong>분석 시간:</strong> {current_timestamp[:19].replace('T', ' ')}</p>
+        <p><strong>분석 이미지 수:</strong> {len(st.session_state['current_analysis']['uploaded_images'])}장</p>
         <p><strong>분석 방법:</strong> OpenCV 컴퓨터 비전 (실제 이미지 특징 추출)</p>
         <p><strong>종합 평가:</strong> 해당 소재는 조직 밀도 {results['density']} ends/inch, 
         두께 {results['thickness']}mm, 중량 {results['weight']}g/m²로 분석되었습니다.</p>
-        <p><strong>특징:</strong> 같은 이미지를 다시 업로드하면 동일한 결과를 얻을 수 있습니다.</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -706,25 +679,22 @@ if st.session_state.get('show_results') and st.session_state.get('current_analys
                 "feedback_timestamp": datetime.now().isoformat()
             }
             
-            # 현재 분석 기록에 피드백 추가
+            # 현재 분석 기록의 material_code와 timestamp 가져오기
             if 'current_analysis' in st.session_state:
                 current_material_code = st.session_state['current_analysis']['material_code']
+                current_timestamp = st.session_state['current_analysis']['timestamp']
+                
+                # 세션 상태 업데이트
                 st.session_state['current_analysis']['feedback'] = feedback_data
                 
-                # 히스토리 업데이트
-                history = load_history_from_aidrive()
+                # 히스토리에서 해당 기록 찾아서 업데이트
+                found, is_saved = update_feedback_in_history(
+                    current_material_code, 
+                    current_timestamp, 
+                    feedback_data
+                )
                 
-                # 해당 소재 코드 찾아서 업데이트
-                updated = False
-                for i, record in enumerate(history):
-                    if record.get('material_code') == current_material_code:
-                        history[i]['feedback'] = feedback_data
-                        updated = True
-                        break
-                
-                if updated:
-                    is_saved = save_history_to_aidrive(history)
-                    
+                if found:
                     if is_saved:
                         st.success("✅ **피드백이 AI Drive에 저장되었습니다!** 팀원들이 볼 수 있습니다.")
                     else:
@@ -732,10 +702,12 @@ if st.session_state.get('show_results') and st.session_state.get('current_analys
                     
                     st.balloons()
                     
-                    # 페이지 새로고침을 위한 rerun
+                    # 페이지 새로고침으로 측정 이력에 즉시 반영
+                    time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("❌ 해당 소재를 히스토리에서 찾을 수 없습니다.")
+                    st.error(f"❌ 히스토리에서 해당 소재를 찾을 수 없습니다. (코드: {current_material_code}, 시간: {current_timestamp[:19]})")
+                    st.info("💡 분석 직후 바로 피드백을 저장해주세요. 페이지를 새로고침하면 연결이 끊길 수 있습니다.")
             else:
                 st.error("❌ 분석 기록이 없습니다. 먼저 소재 분석을 진행해주세요.")
 
@@ -867,8 +839,8 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #6b7280; padding: 2rem 0;'>
     <p><strong>F&F Sergio Tacchini Planning Team</strong></p>
-    <p>AI Material Analysis System v3.0 (OpenCV Real Image Analysis)</p>
-    <p>✅ 같은 이미지 → 같은 결과 보장</p>
+    <p>AI Material Analysis System v3.2 (Feedback Bug Fixed)</p>
+    <p>✅ 같은 이미지 → 같은 결과 | ✅ 피드백 저장 완전 수정</p>
     <p>문의: materials@ff.co.kr</p>
 </div>
 """, unsafe_allow_html=True)
