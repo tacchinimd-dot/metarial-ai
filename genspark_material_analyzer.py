@@ -832,19 +832,29 @@ if history:
         csv_lines = ["소재코드,소재명,공급처,분석시간,밀도,광택,조도,중량,두께,촉감,품질등급,피드백여부"]
         for record in history:
             analysis = record.get('analysis', {})
-            feedback = record.get('feedback', {})
+            feedback = record.get('feedback')
+            
+            # 기본 정보
             line = f"{record.get('material_code', '')},"
             line += f"{record.get('material_name', '')},"
             line += f"{record.get('supplier', '')},"
             line += f"{record.get('timestamp', '')[:19]},"
+            
+            # 분석 결과 (analysis는 항상 딕셔너리)
             line += f"{analysis.get('density', '')},"
             line += f"{analysis.get('gloss', '')},"
             line += f"{analysis.get('roughness', '')},"
             line += f"{analysis.get('weight', '')},"
             line += f"{analysis.get('thickness', '')},"
             line += f"{analysis.get('touch_score', '')},"
-            line += f"{feedback.get('quality_grade', '')},"
-            line += f"{'있음' if feedback else '없음'}"
+            
+            # 피드백 (딕셔너리인지 확인 - 방어적 프로그래밍)
+            if isinstance(feedback, dict):
+                line += f"{feedback.get('quality_grade', '')},"
+                line += f"있음"
+            else:
+                line += f",없음"  # 피드백 없음
+            
             csv_lines.append(line)
         
         csv_data = "\n".join(csv_lines)
