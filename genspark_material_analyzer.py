@@ -19,7 +19,6 @@ import os
 from pathlib import Path
 import numpy as np
 import cv2
-import time
 
 # ========================================
 # AI Drive 설정
@@ -223,32 +222,35 @@ def save_image_to_aidrive(image, material_code, image_type):
         return f"[임시저장] {material_code}_{image_type}_{timestamp}.png"
 
 def load_history_from_aidrive():
-    """AI Drive에서 분석 이력 로드"""
+    """AI Drive 또는 세션 스토리지에서 분석 이력 로드 (Streamlit Cloud 대응)"""
+    # 1순위: 세션 스토리지 (Streamlit Cloud)
+    if 'analysis_history' in st.session_state and st.session_state['analysis_history']:
+        return st.session_state['analysis_history']
+    
+    # 2순위: AI Drive 파일 (로컬 환경)
     try:
         if HISTORY_FILE.exists():
             with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return []
+                history = json.load(f)
+                st.session_state['analysis_history'] = history  # 세션에도 저장
+                return history
     except Exception:
-        # ✅ 1. 세션 히스토리 확인
-        if 'analysis_history' in st.session_state:
-            return st.session_state['analysis_history']
-        
-        # ✅ 2. current_analysis라도 보여주기
-        if 'current_analysis' in st.session_state:
-            return [st.session_state['current_analysis']]
-        
-        return []
+        pass
+    
+    # 3순위: 빈 배열 반환
+    return []
 
 def save_history_to_aidrive(history_data):
-    """AI Drive에 분석 이력 저장"""
+    """AI Drive 또는 세션 스토리지에 분석 이력 저장 (Streamlit Cloud 대응)"""
+    # 세션 스토리지에 항상 저장 (필수!)
+    st.session_state['analysis_history'] = history_data
+    
+    # AI Drive에도 저장 시도 (로컬 환경)
     try:
         with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
             json.dump(history_data, f, ensure_ascii=False, indent=2)
         return True
     except Exception:
-        # ✅ 세션에 명시적으로 저장
-        st.session_state['analysis_history'] = history_data
         return False
 
 def add_analysis_record(record):
@@ -263,9 +265,13 @@ def add_analysis_record(record):
     return is_aidrive
 
 def update_feedback_in_history(material_code, timestamp, feedback_data):
-    """히스토리에서 특정 분석 기록을 찾아 피드백 업데이트"""
+    """
+    히스토리에서 특정 분석 기록을 찾아 피드백 업데이트
+    못 찾으면 current_analysis를 히스토리에 추가 (Failsafe)
+    """
     history = load_history_from_aidrive()
     
+    # 히스토리에서 찾기
     updated = False
     for i, record in enumerate(history):
         if (record.get('material_code') == material_code and 
@@ -274,11 +280,11 @@ def update_feedback_in_history(material_code, timestamp, feedback_data):
             updated = True
             break
     
-    # ✅ 새로 추가: 못 찾으면 current_analysis를 히스토리에 추가!
+    # 못 찾으면 current_analysis를 새로 추가 (Failsafe!)
     if not updated and 'current_analysis' in st.session_state:
         current_record = st.session_state['current_analysis'].copy()
         current_record['feedback'] = feedback_data
-        history.insert(0, current_record)
+        history.insert(0, current_record)  # 맨 앞에 추가
         updated = True
     
     if updated:
@@ -298,6 +304,10 @@ st.set_page_config(
 )
 
 aidrive_available = init_aidrive()
+
+# 세션 상태 초기화 (필수!)
+if 'analysis_history' not in st.session_state:
+    st.session_state['analysis_history'] = []
 
 # ========================================
 # CSS 스타일 (동일)
